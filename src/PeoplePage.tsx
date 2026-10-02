@@ -336,11 +336,12 @@ function AccountForm({ kind, close }: { kind: 'staff' | 'parents'; close: () => 
     toast = useToast();
   return (
     <Modal title={`Create ${staff ? 'staff' : 'parent'} account`} onClose={close} wide>
-      <p>
-        A username and temporary password will be emailed. First sign-in requires a new password.
-      </p>
-      <form
-        onSubmit={async (e) => {
+      <div className="modal-fields">
+        <p>
+          A username and temporary password will be emailed. First sign-in requires a new password.
+        </p>
+        <form
+          onSubmit={async (e) => {
           e.preventDefault();
           setBusy(true);
           setError('');
@@ -379,8 +380,8 @@ function AccountForm({ kind, close }: { kind: 'staff' | 'parents'; close: () => 
           } finally {
             setBusy(false);
           }
-        }}
-      >
+          }}
+        >
         <div className="form-grid">
           {(staff
             ? [
@@ -559,10 +560,11 @@ function AccountForm({ kind, close }: { kind: 'staff' | 'parents'; close: () => 
             {error}
           </p>
         )}
-        <button className="btn" disabled={busy}>
-          {busy && <Spinner />}Create account
-        </button>
-      </form>
+          <button className="btn" disabled={busy}>
+            {busy && <Spinner />}Create account
+          </button>
+        </form>
+      </div>
     </Modal>
   );
 }
