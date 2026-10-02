@@ -1628,6 +1628,8 @@ fieldset:disabled textarea {
   font-family: monospace;
 }
 .modal {
+  display: flex;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 13px;
   padding: 0;
@@ -1671,6 +1673,8 @@ fieldset:disabled textarea {
   border-color: var(--brand-primary);
 }
 .modal-fields {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 28px 28px 16px;
   overflow-y: auto;
 }
