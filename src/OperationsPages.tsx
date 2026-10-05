@@ -615,6 +615,18 @@ export function PlatformPage() {
       toast((e as Error).message, true);
     }
   };
+  const updateAccount = async (account: Row, active: boolean) => {
+    if (!selected) return;
+    try {
+      await api(`/ceo/schools/${selected.id}/users/${account.id}`, 'PATCH', { active });
+      toast(`${account.name} is now ${active ? 'active' : 'inactive'}.`);
+      await detail.refetch();
+      await client.invalidateQueries({ queryKey: ['ceo-schools'] });
+      await client.invalidateQueries({ queryKey: ['ceo-dashboard'] });
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  };
   return (
     <>
       <PageHeader
@@ -735,6 +747,7 @@ export function PlatformPage() {
                         <th>School</th>
                         <th>Students</th>
                         <th>Users</th>
+                        <th>Staff</th>
                         <th>Attendance</th>
                         <th>Fees</th>
                         <th>Status</th>
@@ -751,7 +764,8 @@ export function PlatformPage() {
                             <small className="table-subtext">{s.id}</small>
                           </td>
                           <td>{s.students}</td>
-                          <td>{s.active_users}</td>
+                          <td>{s.users}</td>
+                          <td>{s.staff}</td>
                           <td>{Number(s.attendance_rate || 0).toFixed(1)}%</td>
                           <td>{money(s.fees_collected)}</td>
                           <td>
@@ -883,7 +897,12 @@ export function PlatformPage() {
             ) : (
               <>
                 <p>{detail.data?.school?.address || 'No address recorded.'}</p>
-                <h3>Associated users ({detail.data?.users?.length || 0})</h3>
+                <div className="metrics-grid">
+                  <div className="metric-card"><strong>{detail.data?.counts?.users || 0}</strong><small>Users</small></div>
+                  <div className="metric-card"><strong>{detail.data?.counts?.students || 0}</strong><small>Students</small></div>
+                  <div className="metric-card"><strong>{detail.data?.counts?.staff || 0}</strong><small>Staff</small></div>
+                </div>
+                <h3>Associated users ({detail.data?.counts?.users || 0})</h3>
                 <div className="user-status-list">
                   {detail.data?.users?.map((account: Row) => (
                     <div key={account.id}>
@@ -893,7 +912,18 @@ export function PlatformPage() {
                           {account.email} · {label(account.role)}
                         </small>
                       </span>
-                      <Badge value={account.active ? 'ACTIVE' : 'INACTIVE'} />
+                      <label className="field">
+                        <span className="sr-only">Account status for {account.name}</span>
+                        <select
+                          aria-label={`Account status for ${account.name}`}
+                          value={account.active ? 'active' : 'inactive'}
+                          disabled={selected.access_status === 'revoked' && !account.active}
+                          onChange={(e) => void updateAccount(account, e.target.value === 'active')}
+                        >
+                          <option value="active">Active</option>
+                          <option value="inactive">Inactive</option>
+                        </select>
+                      </label>
                     </div>
                   ))}
                 </div>
@@ -919,7 +949,7 @@ export function PlatformPage() {
             <p>
               {action === 'revoke'
                 ? `This will deactivate every account associated with ${selected.name}, invalidate sessions, and cancel queued jobs. Historical data will be preserved.`
-                : `Restore ${selected.name} to active status. Previously revoked users will remain inactive and must be reviewed separately.`}
+                : `Restore ${selected.name} to active status and reactivate its accounts.`}
             </p>
             <label className="check-field">
               <input
