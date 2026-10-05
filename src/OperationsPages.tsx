@@ -917,7 +917,7 @@ export function PlatformPage() {
                         <select
                           aria-label={`Account status for ${account.name}`}
                           value={account.active ? 'active' : 'inactive'}
-                          disabled={selected.access_status === 'revoked' && !account.active}
+                          disabled={selected.access_status === 'revoked'}
                           onChange={(e) => void updateAccount(account, e.target.value === 'active')}
                         >
                           <option value="active">Active</option>
