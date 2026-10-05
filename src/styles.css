@@ -913,6 +913,112 @@ textarea {
   line-height: 1.7;
   max-width: 720px;
 }
+.platform-sidebar-bottom .school-note {
+  display: none;
+}
+.ceo-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-bottom: 22px;
+}
+.ceo-panel {
+  overflow: visible;
+}
+.ceo-filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(120px, 1fr));
+  gap: 10px;
+  padding: 0 23px 18px;
+}
+.ceo-filters input,
+.ceo-filters select {
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-alt);
+  color: var(--text);
+  padding: 10px 11px;
+  font: inherit;
+  font-size: 11px;
+}
+.ceo-date {
+  display: grid;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 9px;
+}
+.ceo-date input {
+  width: 100%;
+}
+.table-subtext {
+  display: block;
+  color: var(--muted);
+  font-size: 9px;
+  margin-top: 3px;
+}
+.ceo-lower {
+  margin-top: 22px;
+}
+.ceo-chart-list {
+  padding: 0 23px 20px;
+}
+.ceo-chart-row {
+  padding: 9px 0;
+}
+.ceo-chart-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 10px;
+}
+.ceo-chart-label span {
+  color: var(--muted);
+  text-align: right;
+}
+.ceo-bar {
+  height: 7px;
+  margin-top: 7px;
+  border-radius: 99px;
+  background: var(--brand-soft);
+  overflow: hidden;
+}
+.ceo-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--brand-primary);
+}
+.health-list {
+  padding: 0 23px 20px;
+}
+.health-list > div,
+.user-status-list > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.user-status-list {
+  max-height: 300px;
+  overflow: auto;
+  margin: 14px 0 20px;
+}
+.user-status-list small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+}
+.modal-body {
+  padding: 0 24px 24px;
+  max-height: min(70vh, 620px);
+  overflow: auto;
+}
+.modal-body h3 {
+  font-size: 13px;
+  margin: 22px 0 8px;
+}
 .chart-legend {
   display: flex;
   align-items: center;
@@ -2864,6 +2970,16 @@ fieldset:disabled textarea {
   }
   .manual-grid {
     grid-template-columns: 1fr;
+  }
+  .ceo-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ceo-filters {
+    grid-template-columns: 1fr 1fr;
+    padding: 0 17px 16px;
+  }
+  .ceo-filters input {
+    grid-column: 1 / -1;
   }
   .panel-heading {
     padding: 20px 17px 16px;

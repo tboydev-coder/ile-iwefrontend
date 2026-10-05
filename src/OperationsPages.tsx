@@ -1,10 +1,30 @@
 import { useEffect, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Send, Eye, Download, Upload, Check, FileText, ShieldCheck, Plus } from 'lucide-react';
+import {
+  Send,
+  Eye,
+  Download,
+  Upload,
+  Check,
+  FileText,
+  ShieldCheck,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
 import { api, allRecords, downloadFile, request, label } from './api';
 import type { Row } from './api';
 import { useAuth, useToast } from './context';
-import { Empty, ErrorState, Loading, PageHeader, Spinner, Badge } from './components';
+import {
+  Empty,
+  ErrorState,
+  Loading,
+  PageHeader,
+  Spinner,
+  Badge,
+  Modal,
+  Pagination,
+} from './components';
+import { money } from './api';
 import { Records, ResourceSelect, titles, useOptions } from './Records';
 import { ReportForm } from './ResultsPage';
 
@@ -505,65 +525,424 @@ export function ReportsPage() {
 
 export function PlatformPage() {
   const client = useQueryClient(),
-    toast = useToast();
-  const query = useQuery({
-    queryKey: ['platform'],
-    queryFn: () => api<Row[]>('/platform/schools'),
+    toast = useToast(),
+    { session } = useAuth();
+  if (session?.user.role !== 'PLATFORM_SUPER_ADMIN') {
+    return (
+      <Empty
+        title="This area is restricted"
+        description="Only the platform CEO or system administrator can view this dashboard."
+      />
+    );
+  }
+  const [search, setSearch] = useState(''),
+    [status, setStatus] = useState(''),
+    [sort, setSort] = useState('name'),
+    [direction, setDirection] = useState('asc'),
+    [fromDate, setFromDate] = useState(''),
+    [toDate, setToDate] = useState(''),
+    [page, setPage] = useState(1),
+    [selected, setSelected] = useState<Row>(),
+    [action, setAction] = useState<'revoke' | 'restore'>(),
+    [confirmed, setConfirmed] = useState(false),
+    [reason, setReason] = useState('');
+  const params = new URLSearchParams({
+    search,
+    status,
+    sort,
+    direction,
+    page: String(page),
+    page_size: '10',
   });
+  if (fromDate) params.set('from_date', fromDate);
+  if (toDate) params.set('to_date', toDate);
+  const dashboard = useQuery({
+    queryKey: ['ceo-dashboard', fromDate, toDate],
+    queryFn: () =>
+      api<Row>(
+        `/ceo/dashboard?${new URLSearchParams({ ...(fromDate ? { from_date: fromDate } : {}), ...(toDate ? { to_date: toDate } : {}) })}`,
+      ),
+  });
+  const query = useQuery({
+    queryKey: ['ceo-schools', search, status, sort, direction, page, fromDate, toDate],
+    queryFn: () => api<Row>(`/ceo/schools?${params}`),
+  });
+  const detail = useQuery({
+    queryKey: ['ceo-school', selected?.id],
+    queryFn: () => api<Row>(`/ceo/schools/${selected!.id}`),
+    enabled: Boolean(selected),
+  });
+  const metrics = dashboard.data?.metrics || {};
+  const cards = [
+    ['Schools', metrics.schools],
+    ['Active schools', metrics.active_schools],
+    ['Pending schools', metrics.pending_schools],
+    ['Revoked / suspended', (metrics.revoked_schools || 0) + (metrics.suspended_schools || 0)],
+    ['Students', metrics.students],
+    ['Teachers', metrics.teachers],
+    ['Staff', metrics.staff],
+    ['Parents', metrics.parents],
+    ['Active users', metrics.active_users],
+    ['Inactive users', metrics.inactive_users],
+    ['Classes', metrics.classes],
+    ['Subjects', metrics.subjects],
+    ['Attendance rate', `${metrics.attendance_rate || 0}%`],
+    ['Fees collected', money(metrics.fees_collected)],
+    ['Outstanding fees', money(metrics.outstanding_fees)],
+    ['Pending jobs', metrics.pending_jobs],
+    ['Failed jobs', metrics.failed_jobs],
+    ['Current session', dashboard.data?.current_sessions?.join(', ') || 'Not set'],
+    ['Current term', dashboard.data?.current_terms?.join(', ') || 'Not set'],
+  ];
+  const closeAction = () => {
+    setAction(undefined);
+    setConfirmed(false);
+    setReason('');
+  };
+  const submitAction = async () => {
+    if (!selected || !action || !confirmed) return;
+    try {
+      await api(`/ceo/schools/${selected.id}/${action}`, 'POST', { confirmation: true, reason });
+      toast(
+        action === 'revoke'
+          ? 'School access revoked.'
+          : 'School access restored. Users must sign in again.',
+      );
+      closeAction();
+      await client.invalidateQueries({ queryKey: ['ceo-schools'] });
+      await client.invalidateQueries({ queryKey: ['ceo-dashboard'] });
+    } catch (e) {
+      toast((e as Error).message, true);
+    }
+  };
   return (
     <>
       <PageHeader
-        eyebrow="PLATFORM ADMINISTRATION"
-        title="School approvals"
-        description="Review registered schools and manage their access."
+        eyebrow="CEO DASHBOARD"
+        title="Platform overview"
+        description="Compare school health, activity, and access across the Ile-Iwe platform."
+        actions={
+          <button
+            className="btn btn-secondary"
+            onClick={() => {
+              void dashboard.refetch();
+              void query.refetch();
+            }}
+          >
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        }
       />
-      {query.isPending ? (
+      {dashboard.isPending ? (
         <Loading />
-      ) : query.error ? (
-        <ErrorState error={query.error} />
+      ) : dashboard.error ? (
+        <ErrorState error={dashboard.error} retry={() => void dashboard.refetch()} />
       ) : (
-        <section className="panel table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>School</th>
-                <th>Email</th>
-                <th>Status</th>
-                <th>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {query.data.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.name}</td>
-                  <td>{s.email}</td>
-                  <td>
-                    <Badge value={s.status} />
-                  </td>
-                  <td>
-                    <button
-                      className="btn btn-secondary btn-small"
-                      onClick={async () => {
-                        try {
-                          await api(
-                            `/platform/schools/${s.id}/${s.status === 'ACTIVE' ? 'suspend' : 'approve'}`,
-                            'POST',
-                          );
-                          await client.invalidateQueries();
-                          toast('School status updated.');
-                        } catch (e) {
-                          toast((e as Error).message, true);
-                        }
-                      }}
-                    >
-                      {s.status === 'ACTIVE' ? 'Suspend school' : 'Approve school'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </section>
+        <>
+          <div className="metrics-grid ceo-metrics">
+            {cards.map(([title, value]) => (
+              <div className="metric-card" key={title}>
+                <div className="metric-top">
+                  <span>{title}</span>
+                </div>
+                <strong>{value ?? 0}</strong>
+                <small>Platform-wide</small>
+              </div>
+            ))}
+          </div>
+          <section className="panel ceo-panel">
+            <div className="panel-heading">
+              <div>
+                <h2>School overview</h2>
+                <p>Search, filter, inspect, and manage access without loading every record.</p>
+              </div>
+            </div>
+            <div className="ceo-filters">
+              <input
+                aria-label="Search schools"
+                placeholder="Search school name or ID"
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setPage(1);
+                }}
+              />
+              <label className="ceo-date">
+                <span>From</span>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              <label className="ceo-date">
+                <span>To</span>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    setPage(1);
+                  }}
+                />
+              </label>
+              <select
+                aria-label="Filter school status"
+                value={status}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setPage(1);
+                }}
+              >
+                <option value="">All statuses</option>
+                <option value="ACTIVE">Active</option>
+                <option value="PENDING">Pending</option>
+                <option value="SUSPENDED">Suspended</option>
+                <option value="REVOKED">Revoked</option>
+              </select>
+              <select
+                aria-label="Sort schools"
+                value={sort}
+                onChange={(e) => setSort(e.target.value)}
+              >
+                <option value="name">Name</option>
+                <option value="students">Students</option>
+                <option value="attendance">Attendance</option>
+                <option value="fees_collected">Fees collected</option>
+                <option value="last_activity">Last activity</option>
+              </select>
+              <button
+                className="btn btn-secondary"
+                onClick={() => setDirection(direction === 'asc' ? 'desc' : 'asc')}
+              >
+                {direction === 'asc' ? 'Ascending' : 'Descending'}
+              </button>
+            </div>
+            {query.isPending ? (
+              <Loading />
+            ) : query.error ? (
+              <ErrorState error={query.error} retry={() => void query.refetch()} />
+            ) : query.data.items?.length ? (
+              <>
+                <div className="panel table-scroll">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>School</th>
+                        <th>Students</th>
+                        <th>Users</th>
+                        <th>Attendance</th>
+                        <th>Fees</th>
+                        <th>Status</th>
+                        <th>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {query.data.items.map((s: Row) => (
+                        <tr key={s.id}>
+                          <td>
+                            <button className="text-link" onClick={() => setSelected(s)}>
+                              {s.name}
+                            </button>
+                            <small className="table-subtext">{s.id}</small>
+                          </td>
+                          <td>{s.students}</td>
+                          <td>{s.active_users}</td>
+                          <td>{Number(s.attendance_rate || 0).toFixed(1)}%</td>
+                          <td>{money(s.fees_collected)}</td>
+                          <td>
+                            <Badge value={s.access_status} />
+                          </td>
+                          <td>
+                            <button
+                              className="btn btn-secondary btn-small"
+                              onClick={() => {
+                                setSelected(s);
+                                setAction(s.access_status === 'revoked' ? 'restore' : 'revoke');
+                              }}
+                            >
+                              {s.access_status === 'revoked' ? 'Restore' : 'Revoke'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <Pagination
+                  page={query.data.page}
+                  total={query.data.total}
+                  pageSize={query.data.page_size}
+                  onChange={setPage}
+                />
+              </>
+            ) : (
+              <Empty
+                title="No schools found"
+                description="Try a different search or status filter."
+              />
+            )}
+          </section>
+          <section className="dashboard-grid ceo-lower">
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>School comparison</h2>
+                  <p>Student enrollment, attendance, and fees for the largest schools.</p>
+                </div>
+              </div>
+              <div className="ceo-chart-list">
+                {dashboard.data.school_breakdown?.map((school: Row) => (
+                  <div className="ceo-chart-row" key={school.name}>
+                    <div className="ceo-chart-label">
+                      <strong>{school.name}</strong>
+                      <span>
+                        {school.students} students ·{' '}
+                        {Number(school.attendance_rate || 0).toFixed(1)}% attendance
+                      </span>
+                    </div>
+                    <div className="ceo-bar">
+                      <i
+                        style={{
+                          width: `${Math.min(100, (Number(school.students || 0) / Math.max(1, Number(dashboard.data.school_breakdown?.[0]?.students || 1))) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Recent activity</h2>
+                  <p>Latest events across all schools.</p>
+                </div>
+              </div>
+              <div className="activity-list">
+                {dashboard.data.recent_activity?.map((event: Row) => (
+                  <div className="activity-row" key={event.id}>
+                    <span className="activity-dot" />
+                    <div>
+                      <strong>{event.action}</strong>
+                      <small>
+                        {event.school_name} · {new Date(event.created_at).toLocaleString()}
+                      </small>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>System health</h2>
+                  <p>Signals from the API and durable worker queue.</p>
+                </div>
+              </div>
+              <div className="health-list">
+                <div>
+                  <span>API</span>
+                  <Badge value={dashboard.data.health?.api || 'UNKNOWN'} />
+                </div>
+                <div>
+                  <span>Database</span>
+                  <Badge value={dashboard.data.health?.database || 'UNKNOWN'} />
+                </div>
+                <div>
+                  <span>Worker</span>
+                  <Badge value={dashboard.data.health?.worker || 'UNKNOWN'} />
+                </div>
+                <div>
+                  <span>Pending jobs</span>
+                  <strong>{metrics.pending_jobs || 0}</strong>
+                </div>
+                <div>
+                  <span>Failed jobs</span>
+                  <strong>{metrics.failed_jobs || 0}</strong>
+                </div>
+              </div>
+            </section>
+          </section>
+        </>
+      )}
+      {selected && !action && (
+        <Modal
+          title={detail.data?.school?.name || selected.name}
+          onClose={() => setSelected(undefined)}
+        >
+          <div className="modal-body">
+            {detail.isPending ? (
+              <Loading />
+            ) : detail.error ? (
+              <ErrorState error={detail.error} />
+            ) : (
+              <>
+                <p>{detail.data?.school?.address || 'No address recorded.'}</p>
+                <h3>Associated users ({detail.data?.users?.length || 0})</h3>
+                <div className="user-status-list">
+                  {detail.data?.users?.map((account: Row) => (
+                    <div key={account.id}>
+                      <span>
+                        {account.name}
+                        <small>
+                          {account.email} · {label(account.role)}
+                        </small>
+                      </span>
+                      <Badge value={account.active ? 'ACTIVE' : 'INACTIVE'} />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() =>
+                    setAction(selected.access_status === 'revoked' ? 'restore' : 'revoke')
+                  }
+                >
+                  {selected.access_status === 'revoked' ? 'Restore access' : 'Revoke access'}
+                </button>
+              </>
+            )}
+          </div>
+        </Modal>
+      )}
+      {selected && action && (
+        <Modal
+          title={action === 'revoke' ? 'Revoke school access' : 'Restore school access'}
+          onClose={closeAction}
+        >
+          <div className="modal-body">
+            <p>
+              {action === 'revoke'
+                ? `This will deactivate every account associated with ${selected.name}, invalidate sessions, and cancel queued jobs. Historical data will be preserved.`
+                : `Restore ${selected.name} to active status. Previously revoked users will remain inactive and must be reviewed separately.`}
+            </p>
+            <label className="check-field">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+              />
+              I understand the access change
+            </label>
+            <label className="field">
+              <span>Reason (optional)</span>
+              <textarea
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                maxLength={500}
+                rows={3}
+              />
+            </label>
+            <button className="btn" disabled={!confirmed} onClick={() => void submitAction()}>
+              {action === 'revoke' ? 'Revoke access' : 'Restore school'}
+            </button>
+          </div>
+        </Modal>
       )}
     </>
   );

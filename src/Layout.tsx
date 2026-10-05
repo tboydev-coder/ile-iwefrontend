@@ -20,7 +20,6 @@ import {
   X,
   ChevronDown,
   ArrowUpRight,
-  School,
   CircleHelp,
 } from 'lucide-react';
 import { useAuth, useTheme } from './context';
@@ -59,6 +58,11 @@ const navigation = [
   },
 ];
 
+const platformNavigation = [
+  { label: 'Platform analytics', to: '/platform', icon: ChartNoAxesCombined },
+  { label: 'School access control', to: '/platform/access', icon: ShieldCheck },
+];
+
 export function Layout() {
   const auth = useAuth();
   const theme = useTheme();
@@ -90,6 +94,7 @@ export function Layout() {
       </div>
     );
   const { school, user } = auth.session;
+  const isPlatformAdmin = user.role === 'PLATFORM_SUPER_ADMIN';
   if (user.must_change_password) return <Navigate to="/change-password" replace />;
   if (user.role === 'TEACHER' || user.role === 'PARENT') {
     const prefix = user.role === 'TEACHER' ? '/teacher' : '/parent';
@@ -100,8 +105,12 @@ export function Layout() {
         : '/dashboard';
     return <Navigate to={prefix + page + location.search} replace />;
   }
-  const title =
-    navigation.find((n) => n.to !== '/' && location.pathname.startsWith(n.to))?.label || 'Overview';
+  const title = isPlatformAdmin
+    ? location.pathname.startsWith('/platform/access')
+      ? 'School access control'
+      : 'Platform analytics'
+    : navigation.find((n) => n.to !== '/' && location.pathname.startsWith(n.to))?.label ||
+      'Overview';
   return (
     <div className="app-shell">
       <a className="skip-link" href="#main-content">
@@ -116,7 +125,7 @@ export function Layout() {
       )}
       <aside className={'sidebar ' + (mobile ? 'sidebar-open' : '')}>
         <div className="sidebar-brand">
-          <Link to="/" aria-label="ile-iwe home">
+          <Link to={isPlatformAdmin ? '/platform' : '/'} aria-label="ile-iwe home">
             <Brand />
           </Link>
           <button
@@ -133,28 +142,23 @@ export function Layout() {
           </span>
           <div>
             <strong>{school.name}</strong>
-            <small>School workspace</small>
+            <small>{isPlatformAdmin ? 'Platform workspace' : 'School workspace'}</small>
           </div>
           <ChevronDown size={14} />
         </div>
         <div className="nav-label">WORKSPACE</div>
         <nav aria-label="Main navigation">
-          {navigation
-            .filter((n) => !n.permission || auth.can(n.permission))
-            .map((n) => (
-              <NavLink key={n.to} end={n.to === '/'} to={n.to} onClick={() => setMobile(false)}>
-                <n.icon size={18} strokeWidth={1.8} />
-                <span>{n.label}</span>
-              </NavLink>
-            ))}
-          {user.role === 'PLATFORM_SUPER_ADMIN' && (
-            <NavLink to="/platform">
-              <School size={18} />
-              School approvals
+          {(isPlatformAdmin
+            ? platformNavigation
+            : navigation.filter((n) => !n.permission || auth.can(n.permission))
+          ).map((n) => (
+            <NavLink key={n.to} end={n.to === '/'} to={n.to} onClick={() => setMobile(false)}>
+              <n.icon size={18} strokeWidth={1.8} />
+              <span>{n.label}</span>
             </NavLink>
-          )}
+          ))}
         </nav>
-        <div className="sidebar-bottom">
+        <div className={'sidebar-bottom ' + (isPlatformAdmin ? 'platform-sidebar-bottom' : '')}>
           <div className="school-note">
             <span className="note-spark">✦</span>
             <strong>A little more time to teach.</strong>

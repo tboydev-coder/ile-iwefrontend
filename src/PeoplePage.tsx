@@ -342,224 +342,225 @@ function AccountForm({ kind, close }: { kind: 'staff' | 'parents'; close: () => 
         </p>
         <form
           onSubmit={async (e) => {
-          e.preventDefault();
-          setBusy(true);
-          setError('');
-          try {
-            const payload = { ...values };
-            if (staff) {
-              for (const f of ['staff_code', 'date_of_birth', 'employment_date'])
-                payload[f] ||= null;
-              if (payload.role !== 'TEACHER') {
-                payload.subjects = [];
-                payload.class_teacher_ids = [];
+            e.preventDefault();
+            setBusy(true);
+            setError('');
+            try {
+              const payload = { ...values };
+              if (staff) {
+                for (const f of ['staff_code', 'date_of_birth', 'employment_date'])
+                  payload[f] ||= null;
+                if (payload.role !== 'TEACHER') {
+                  payload.subjects = [];
+                  payload.class_teacher_ids = [];
+                }
               }
-            }
-            const account = await api(`/accounts/${kind}`, 'POST', payload);
-            if (staff && photo) {
-              const data = new FormData();
-              data.append('file', photo);
-              try {
-                await request(`/staff/${account.staff.id}/photo`, { method: 'POST', body: data });
-              } catch (e) {
-                toast(
-                  `Account created, but the photo could not be saved. Use Profile photo to retry. ${(e as Error).message}`,
-                  true,
-                );
+              const account = await api(`/accounts/${kind}`, 'POST', payload);
+              if (staff && photo) {
+                const data = new FormData();
+                data.append('file', photo);
+                try {
+                  await request(`/staff/${account.staff.id}/photo`, { method: 'POST', body: data });
+                } catch (e) {
+                  toast(
+                    `Account created, but the photo could not be saved. Use Profile photo to retry. ${(e as Error).message}`,
+                    true,
+                  );
+                }
               }
+              await client.invalidateQueries();
+              toast(
+                values.active === false
+                  ? 'Inactive staff account created.'
+                  : 'Account created. Invitation queued for delivery.',
+              );
+              close();
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
             }
-            await client.invalidateQueries();
-            toast(
-              values.active === false
-                ? 'Inactive staff account created.'
-                : 'Account created. Invitation queued for delivery.',
-            );
-            close();
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setBusy(false);
-          }
           }}
         >
-        <div className="form-grid">
-          {(staff
-            ? [
-                'first_name',
-                'last_name',
-                'email',
-                'phone',
-                'staff_code',
-                'date_of_birth',
-                'employment_date',
-                'department',
-                'job_title',
-                'staff_type',
-              ]
-            : ['name', 'email', 'phone', 'address']
-          ).map((f) => (
-            <label className="field" key={f}>
-              <span>{f === 'job_title' ? 'Position' : label(f)}</span>
-              <input
-                type={
-                  f === 'email'
-                    ? 'email'
-                    : f.endsWith('date') || f === 'date_of_birth'
-                      ? 'date'
-                      : 'text'
-                }
-                value={values[f]}
-                required={['first_name', 'last_name', 'email', 'name'].includes(f)}
-                onChange={(e) => setValues({ ...values, [f]: e.target.value })}
-              />
-            </label>
-          ))}
-        </div>
-        {staff ? (
-          <>
-            <label className="field">
-              <span>Profile photo</span>
-              <input
-                type="file"
-                aria-label="Profile photo"
-                accept="image/png,image/jpeg,image/webp"
-                onChange={(e) => setPhoto(e.target.files?.[0])}
-              />
-              <small>PNG, JPEG or WebP, up to 2 MB.</small>
-            </label>
-            <label className="field">
-              <span>System role</span>
-              <select
-                value={values.role}
-                onChange={(e) => setValues({ ...values, role: e.target.value })}
-              >
-                {['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'STAFF'].map((r) => (
-                  <option key={r}>{r}</option>
-                ))}
-              </select>
-              <small>
-                Position and system role are independent. A principal can be assigned School Admin.
-              </small>
-            </label>
-            <label className="field">
-              <span>Gender</span>
-              <select
-                value={values.gender}
-                onChange={(e) => setValues({ ...values, gender: e.target.value })}
-              >
-                <option value="">Not recorded</option>
-                <option>Female</option>
-                <option>Male</option>
-                <option>Prefer not to say</option>
-              </select>
-            </label>
-            <label className="check-field">
-              <input
-                type="checkbox"
-                checked={values.active}
-                onChange={(e) => setValues({ ...values, active: e.target.checked })}
-              />
-              Active account
-            </label>
-            {values.role === 'TEACHER' && <AssignmentFields values={values} change={setValues} />}
-          </>
-        ) : (
-          <fieldset>
-            <legend>Children and communication</legend>
-            {values.children.map((c: Row, i: number) => (
-              <div className="panel portal-card" key={i}>
-                <ResourceSelect
-                  resource="students"
-                  title={`Child ${i + 1}`}
-                  value={c.student_id}
-                  onChange={(v) =>
-                    setValues({
-                      ...values,
-                      children: values.children.map((r: Row, n: number) =>
-                        i === n ? { ...r, student_id: v } : r,
-                      ),
-                    })
-                  }
-                  required
-                />
-                <label className="field">
-                  <span>Relationship</span>
-                  <input
-                    value={c.relationship}
-                    required
-                    onChange={(e) =>
-                      setValues({
-                        ...values,
-                        children: values.children.map((r: Row, n: number) =>
-                          i === n ? { ...r, relationship: e.target.value } : r,
-                        ),
-                      })
-                    }
-                  />
-                </label>
-                <label className="check-field">
-                  <input
-                    type="checkbox"
-                    checked={c.primary_contact}
-                    onChange={(e) =>
-                      setValues({
-                        ...values,
-                        children: values.children.map((r: Row, n: number) =>
-                          i === n ? { ...r, primary_contact: e.target.checked } : r,
-                        ),
-                      })
-                    }
-                  />
-                  Primary contact
-                </label>
-                {values.children.length > 1 && (
-                  <button
-                    type="button"
-                    className="btn btn-secondary"
-                    onClick={() =>
-                      setValues({
-                        ...values,
-                        children: values.children.filter((_: Row, n: number) => n !== i),
-                      })
-                    }
-                  >
-                    Remove child
-                  </button>
-                )}
-              </div>
-            ))}
-            <button
-              type="button"
-              className="btn btn-secondary"
-              onClick={() =>
-                setValues({
-                  ...values,
-                  children: [
-                    ...values.children,
-                    { student_id: '', relationship: 'Guardian', primary_contact: false },
-                  ],
-                })
-              }
-            >
-              Link another child
-            </button>
-            {['email'].map((c) => (
-              <label className="check-field" key={c}>
+          <div className="form-grid">
+            {(staff
+              ? [
+                  'first_name',
+                  'last_name',
+                  'email',
+                  'phone',
+                  'staff_code',
+                  'date_of_birth',
+                  'employment_date',
+                  'department',
+                  'job_title',
+                  'staff_type',
+                ]
+              : ['name', 'email', 'phone', 'address']
+            ).map((f) => (
+              <label className="field" key={f}>
+                <span>{f === 'job_title' ? 'Position' : label(f)}</span>
                 <input
-                  type="checkbox"
-                  checked={values['notify_' + c]}
-                  onChange={(e) => setValues({ ...values, ['notify_' + c]: e.target.checked })}
+                  type={
+                    f === 'email'
+                      ? 'email'
+                      : f.endsWith('date') || f === 'date_of_birth'
+                        ? 'date'
+                        : 'text'
+                  }
+                  value={values[f]}
+                  required={['first_name', 'last_name', 'email', 'name'].includes(f)}
+                  onChange={(e) => setValues({ ...values, [f]: e.target.value })}
                 />
-                {label(c)} updates
               </label>
             ))}
-          </fieldset>
-        )}
-        {error && (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        )}
+          </div>
+          {staff ? (
+            <>
+              <label className="field">
+                <span>Profile photo</span>
+                <input
+                  type="file"
+                  aria-label="Profile photo"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => setPhoto(e.target.files?.[0])}
+                />
+                <small>PNG, JPEG or WebP, up to 2 MB.</small>
+              </label>
+              <label className="field">
+                <span>System role</span>
+                <select
+                  value={values.role}
+                  onChange={(e) => setValues({ ...values, role: e.target.value })}
+                >
+                  {['SCHOOL_ADMIN', 'TEACHER', 'ACCOUNTANT', 'STAFF'].map((r) => (
+                    <option key={r}>{r}</option>
+                  ))}
+                </select>
+                <small>
+                  Position and system role are independent. A principal can be assigned School
+                  Admin.
+                </small>
+              </label>
+              <label className="field">
+                <span>Gender</span>
+                <select
+                  value={values.gender}
+                  onChange={(e) => setValues({ ...values, gender: e.target.value })}
+                >
+                  <option value="">Not recorded</option>
+                  <option>Female</option>
+                  <option>Male</option>
+                  <option>Prefer not to say</option>
+                </select>
+              </label>
+              <label className="check-field">
+                <input
+                  type="checkbox"
+                  checked={values.active}
+                  onChange={(e) => setValues({ ...values, active: e.target.checked })}
+                />
+                Active account
+              </label>
+              {values.role === 'TEACHER' && <AssignmentFields values={values} change={setValues} />}
+            </>
+          ) : (
+            <fieldset>
+              <legend>Children and communication</legend>
+              {values.children.map((c: Row, i: number) => (
+                <div className="panel portal-card" key={i}>
+                  <ResourceSelect
+                    resource="students"
+                    title={`Child ${i + 1}`}
+                    value={c.student_id}
+                    onChange={(v) =>
+                      setValues({
+                        ...values,
+                        children: values.children.map((r: Row, n: number) =>
+                          i === n ? { ...r, student_id: v } : r,
+                        ),
+                      })
+                    }
+                    required
+                  />
+                  <label className="field">
+                    <span>Relationship</span>
+                    <input
+                      value={c.relationship}
+                      required
+                      onChange={(e) =>
+                        setValues({
+                          ...values,
+                          children: values.children.map((r: Row, n: number) =>
+                            i === n ? { ...r, relationship: e.target.value } : r,
+                          ),
+                        })
+                      }
+                    />
+                  </label>
+                  <label className="check-field">
+                    <input
+                      type="checkbox"
+                      checked={c.primary_contact}
+                      onChange={(e) =>
+                        setValues({
+                          ...values,
+                          children: values.children.map((r: Row, n: number) =>
+                            i === n ? { ...r, primary_contact: e.target.checked } : r,
+                          ),
+                        })
+                      }
+                    />
+                    Primary contact
+                  </label>
+                  {values.children.length > 1 && (
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() =>
+                        setValues({
+                          ...values,
+                          children: values.children.filter((_: Row, n: number) => n !== i),
+                        })
+                      }
+                    >
+                      Remove child
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  setValues({
+                    ...values,
+                    children: [
+                      ...values.children,
+                      { student_id: '', relationship: 'Guardian', primary_contact: false },
+                    ],
+                  })
+                }
+              >
+                Link another child
+              </button>
+              {['email'].map((c) => (
+                <label className="check-field" key={c}>
+                  <input
+                    type="checkbox"
+                    checked={values['notify_' + c]}
+                    onChange={(e) => setValues({ ...values, ['notify_' + c]: e.target.checked })}
+                  />
+                  {label(c)} updates
+                </label>
+              ))}
+            </fieldset>
+          )}
+          {error && (
+            <p className="form-error" role="alert">
+              {error}
+            </p>
+          )}
           <button className="btn" disabled={busy}>
             {busy && <Spinner />}Create account
           </button>

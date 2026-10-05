@@ -178,6 +178,7 @@ function App() {
           }
         />
         <Route path="platform" element={<PlatformPage />} />
+        <Route path="platform/access" element={<PlatformPage />} />
         <Route
           path="*"
           element={
