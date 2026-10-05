@@ -36,6 +36,7 @@ export type FieldSpec = {
   default?: unknown;
   resource?: string;
   options?: string[];
+  curriculum_options?: { name: string; level: string }[];
   max_length?: number;
 };
 export type Catalog = Record<
@@ -81,7 +82,7 @@ const columns: Record<string, string[]> = {
   terms: ['name', 'session_id', 'start_date', 'end_date', 'active'],
   'class-levels': ['name', 'sort_order'],
   classes: ['name', 'level_id', 'teacher_id'],
-  subjects: ['name', 'code', 'category', 'compulsory', 'active'],
+  subjects: ['school_level', 'name', 'code', 'category', 'compulsory', 'active'],
   assignments: ['class_id', 'subject_id', 'teacher_id'],
   assessments: ['name', 'weight', 'max_score', 'active'],
   'grading-scales': ['name', 'active'],
@@ -261,11 +262,13 @@ export function RecordForm({
   fields,
   record,
   onClose,
+  schoolType,
 }: {
   resource: string;
   fields: FieldSpec[];
   record?: Row;
   onClose: () => void;
+  schoolType?: string;
 }) {
   const client = useQueryClient(),
     toast = useToast();
@@ -273,7 +276,12 @@ export function RecordForm({
   const initial = Object.fromEntries(
     fields.map((f) => [
       f.name,
-      record?.[f.name] ?? f.default ?? (f.type === 'boolean' ? false : ''),
+      record?.[f.name] ??
+        (resource === 'subjects' && f.name === 'school_level'
+          ? schoolType === 'SECONDARY'
+            ? 'SECONDARY'
+            : 'PRIMARY'
+          : f.default ?? (f.type === 'boolean' ? false : '')),
     ]),
   );
   const form = useForm<Row>({ defaultValues: initial });
@@ -325,6 +333,16 @@ export function RecordForm({
                   onChange={(v) => form.setValue(f.name, v)}
                   required={f.required}
                   teacherOnly={f.name === 'teacher_id'}
+                />
+              ) : resource === 'subjects' && f.name === 'school_level' ? null : f.name === 'name' &&
+                resource === 'subjects' &&
+                f.curriculum_options ? (
+                <SubjectNameField
+                  key={f.name}
+                  field={f}
+                  form={form}
+                  record={record}
+                  schoolType={schoolType || 'COMBINED'}
                 />
               ) : f.type === 'boolean' ? (
                 <label className="checkbox-field" key={f.name}>
@@ -430,6 +448,99 @@ export function RecordForm({
         </fieldset>
       </form>
     </Modal>
+  );
+}
+
+function SubjectNameField({
+  field,
+  form,
+  record,
+  schoolType,
+}: {
+  field: FieldSpec;
+  form: ReturnType<typeof useForm<Row>>;
+  record?: Row;
+  schoolType: string;
+}) {
+  const initialLevel =
+    record?.school_level ||
+    (schoolType === 'SECONDARY' ? 'SECONDARY' : 'PRIMARY');
+  const [level, setLevel] = useState(
+    initialLevel,
+  );
+  useEffect(() => {
+    if (schoolType !== 'COMBINED') {
+      form.setValue('school_level', schoolType);
+      setLevel(schoolType);
+    } else if (!record) {
+      form.setValue('school_level', level);
+    }
+  }, [form, level, record, schoolType]);
+  const options =
+    field.curriculum_options?.filter((option) => option.level === level) || [];
+  const current = form.watch('name') || '';
+  const isCustom = Boolean(current) && !options.some((option) => option.name === current);
+  const [custom, setCustom] = useState(isCustom);
+  return (
+    <>
+      {schoolType === 'COMBINED' && (
+        <div className="field">
+          <label htmlFor="record-field-school-level">Curriculum track</label>
+          <select
+            id="record-field-school-level"
+            value={level}
+            onChange={(event) => {
+              const next = event.target.value;
+              setLevel(next);
+              form.setValue('school_level', next);
+              form.setValue('name', '');
+            }}
+          >
+            <option value="PRIMARY">Primary / Kindergarten</option>
+            <option value="SECONDARY">Secondary (JSS / SSS)</option>
+          </select>
+        </div>
+      )}
+      <div className="field">
+        <label htmlFor="record-field-name">Subject name</label>
+        <select
+          id="record-field-name"
+          value={custom ? '__custom__' : current}
+          onChange={(event) => {
+            const value = event.target.value;
+            if (value === '__custom__') {
+              setCustom(true);
+              form.setValue('name', '');
+            } else {
+              setCustom(false);
+              form.setValue('name', value);
+            }
+          }}
+          required={!custom}
+          disabled={Boolean(record)}
+        >
+          <option value="">Select an approved subject</option>
+          {options.map((option) => (
+            <option key={`${option.level}-${option.name}`} value={option.name}>
+              {option.name}
+            </option>
+          ))}
+          <option value="__custom__">Other subject (enter manually)</option>
+        </select>
+      </div>
+      {custom && (
+        <div className="field">
+          <label htmlFor="record-field-custom-name">Custom subject name</label>
+          <input
+            id="record-field-custom-name"
+            value={current}
+            onChange={(event) => form.setValue('name', event.target.value)}
+            required
+            maxLength={field.max_length || 120}
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -709,6 +820,7 @@ export function Records({
           fields={meta.fields}
           record={edit || undefined}
           onClose={close}
+          schoolType={auth.session?.school.school_type}
         />
       )}
       {detail &&
